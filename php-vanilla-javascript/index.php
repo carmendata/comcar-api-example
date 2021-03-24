@@ -43,24 +43,17 @@
         <a href="https://api.comcar.co.uk">Comcar API</a>
     </p>
     <p class="status" id="status"></p>
-    <section class="vehicle-selection hidden">
-        <select class="vehicle-selection__selector" id="make-selector"></select>
-        <select class="vehicle-selection__selector" id="model-selector"></select>
-        <select class="vehicle-selection__selector" id="vehicle-selector"></select>
-    </section>
-    <section class="vehicle-details hidden"></section>
-    <section class="raw-data">
-        <pre id="raw-data__json" class="hidden"></pre>
+    <section id="ui"></section>
+    <section id="raw-data" class="hidden">
+        <hr />
+        <strong>JSON response</strong>
+        <pre id="raw-data__json"></pre>
     </section>
 
     <script>
         // grab DOM elements
-        var $selectors = {
-            make: document.getElementById('make-selector'),
-            model: document.getElementById('model-selector'),
-            vehicle: document.getElementById('vehicle-selector'),
-        };
-        var $details = document.getElementById('vehicle-selector');
+        var $ui = document.getElementById('ui');
+        var $response = document.getElementById('raw-data');
         var $json = document.getElementById('raw-data__json');
         var $status = document.getElementById('status');
 
@@ -84,10 +77,21 @@
         function setResponse(json) {
             if(json === '') {
                 $json.innerHTML = '';
-                $json.classList.add('hidden');
+                $response.classList.add('hidden');
             } else {
                 $json.innerHTML = json;
-                $json.classList.remove('hidden');
+                $response.classList.remove('hidden');
+            }
+        }
+
+        // print ui
+        function setUI(html) {
+            if(html === '') {
+                $ui.innerHTML = '';
+                $ui.classList.add('hidden');
+            } else {
+                $ui.innerHTML = html;
+                $ui.classList.remove('hidden');
             }
         }
 
@@ -146,25 +150,11 @@
             return {};
         }
 
-        // on page load grab all makes
-        function processAPIResponse(api_data) {
-            try {
-                setResponse(api_data);
-                var response = JSON.parse(api_data);
-                console.log(response);
-                setStatus(
-                    response.msg,
-                    response.success
-                );
-            } catch (err) {
-                setStatus('Could not decode response: ' + err, false);
-                setResponse('');
-            }
-        }
-
         // call API, making intemediary call to private PHP to access request hash
-        async function callAPI(path) {
+        async function callAPI(path,callback) {
             var api_base = 'https://api.comcar.co.uk/v1/vehicles/';
+            setUI('');
+            setResponse('');
             try {
                 var call_data = await getCallData();
                 if(typeof call_data.hash !== 'undefined') {
@@ -177,7 +167,14 @@
                             {name:'time',value: call_data.time},
                         ]
                     );
-                    processAPIResponse(api_data);
+                    try {
+                        setResponse(api_data);
+                        var response = JSON.parse(api_data);
+                        callback(response);
+                    } catch (err) {
+                        setStatus('Could not decode response: ' + err, false);
+                        setResponse('');
+                    }
                 }
             } catch (err) {
                 // set the app status, success is false
@@ -185,7 +182,100 @@
             }
         }
 
-        callAPI('makes');
+        // load makes
+        function loadMakes() {
+            setUI('');
+            callAPI('makes',(response) => {
+                setStatus(response.msg);
+                if(response.success && response.data.length) {
+                    arr_el = response.data.map((item) => {
+                        return `
+                            <div class="api-item">
+                                <a href="#" onclick="loadModels('${item.make}')">
+                                    ${item.make}
+                                </a>
+                            </div>
+                        `;
+                    });
+                    setUI(arr_el.join(''));
+                }
+            });
+        }
+
+        // load models
+        function loadModels(make) {
+            setUI('')
+            callAPI('makes/'+make+'/models',(response) => {
+                setStatus(response.msg);
+                if(response.success && response.data.length) {
+                    arr_el = [`<h2>${make}</h2>`];
+                    arr_el = response.data.map((item) => {
+                        return `
+                            <div class="api-item">
+                                <a href="#" onclick="loadVehicles('${item.make}','${item.model}')">
+                                    ${item.model}
+                                </a>
+                            </div>
+                        `;
+                    });
+                    setUI(arr_el.join(''));
+                }
+            });
+        }
+
+        // load vehicles
+        function loadVehicles(make,model) {
+            setUI('');
+            callAPI('makes/'+make+'/models/'+model+'/vehicles',(response) => {
+                setStatus(response.msg);
+                if(response.success && response.data.length) {
+                    arr_el = [`<h2>${make} ${model}</h2>`];
+                    arr_el = response.data.map((item) => {
+                        return `
+                            <div class="api-item">
+                                <a href="#" onclick="loadDetail('${item.vehicle_id}')">
+                                    ${item.grade}
+                                    ${item.engine}
+                                </a>
+                            </div>
+                        `;
+                    });
+                    setUI(arr_el.join(''));
+                }
+            });
+        }
+
+        // load vehicle detail
+        function loadDetail(id) {
+            setUI('');
+            callAPI('vehicle/'+id,(response) => {
+                setStatus(response.msg);
+                if(response.success && response.data.length) {
+                    const item = response.data[0];
+                    console.log(item);
+                    arr_el = [
+                        `<h2>${item.description.make} ${item.description.model} ${item.description.derivative}</h2>`,
+                        `<h3>Details</h3>`,
+                        `<ul>
+                        <li>Fuel Type: ${item.description.fueltype}</li>
+                        <li>Transmission: ${item.description.transmission}</li>
+                        <li>Doors: ${item.description.doors}</li>
+                        <li>Seats: ${item.description.seats}</li>
+                        <li>WLTP CO<sub>2</sub>: ${item.emissions.wltp_co2_gpkm}</li>
+                        <li>WLTP MPG: ${item.economy.mpg_combined_tel}-${item.economy.mpg_combined_teh}</li>
+                        </ul>`,
+                        `<h3>Tax</h3>`,
+                        `<ul>
+                            <li>Percentage: ${parseInt(item.tax[0].co2_percentage*100)}</li>
+                            <li>Percentage: ${(item.tax[0].bands[1].vehicle_tax)}</li>
+                        </ul>`
+                    ];
+                    setUI(arr_el.join(''));
+                }
+            });
+        }
+
+        loadMakes();
     </script>
 </body>
 </html>
