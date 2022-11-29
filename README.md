@@ -10,4 +10,4 @@ for all sales and api enquiries.
 
 You mustn't place your API key and secret in a place accessible via your webserver.
 
-`api.ini` should be kepy outside your web root
+`api.ini` should be kept outside your web root
