@@ -15,8 +15,26 @@ $timestamp = time();
 // create a unique nonce
 $nonce = uniqid();
 
+// message body to include in hash, made of request params
+$message = '';
+
+// make an ordered array of key names
+$arr_param_names = array_keys($_GET);
+sort($arr_param_names);
+
+// add the params in order to the message
+foreach($arr_param_names as $param){
+    // get the value, blank if it's null
+    $value = $_GET[ $param ];
+    // if the value is not blank, add it to the message
+    if( $value !== '' ) {
+        $message .= $param . '=' . $value;
+    }
+};
+
 // concatenate data together
 $combined_data = $api_key
+                . $message
                 . $api_secret
                 . $nonce
                 . $timestamp;
